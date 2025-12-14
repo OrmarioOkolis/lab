@@ -8,7 +8,6 @@ usage() {
     exit 1
 }
 
-# Provjera argumenata
 if [ $# -lt 1 ]; then
     usage
 fi
@@ -16,49 +15,59 @@ fi
 ACTION=$1
 TARGET=$2
 
-# Funkcija za pokretanje VM
-start_vm() {
-    virsh start "$1"
-}
-
-# Funkcija za zaustavljanje VM
-stop_vm() {
-    virsh shutdown "$1"
-}
-
-# Funkcija za reset VM
-reset_vm() {
-    virsh reset "$1"
-}
-
-# Funkcija za status VM
-status_vm() {
-    virsh dominfo "$1"
-}
-
-# Ako je target "all", radi na svim VM-ovima
+# Odredi ciljne VM-ove
 if [ "$TARGET" == "all" ] || [ -z "$TARGET" ]; then
     TARGETS=("${VMS[@]}")
 else
     TARGETS=("$TARGET")
 fi
 
+# Funkcije
+start_vm() {
+    echo "Starting $1..."
+    virsh start "$1"
+}
+
+stop_vm() {
+    echo "Stopping $1..."
+    virsh shutdown "$1"
+}
+
+status_vm() {
+    echo "Status of $1:"
+    virsh dominfo "$1"
+}
+
+reset_vm() {
+    local vm=$1
+    # Provjeri postoji li snapshot 'clean'
+    if virsh snapshot-list "$vm" | grep -q "^clean"; then
+        echo "Resetting $vm to snapshot 'clean'..."
+        virsh shutdown "$vm"
+        # Sačekaj dok se VM ne ugasi
+        while [ "$(virsh domstate "$vm")" != "shut off" ]; do
+            sleep 1
+        done
+        virsh revert "$vm" clean
+        virsh start "$vm"
+    else
+        echo "Error: Snapshot 'clean' does not exist for $vm!"
+    fi
+}
+
+# Glavna logika
 for vm in "${TARGETS[@]}"; do
     case $ACTION in
         start)
-            echo "Starting $vm..."
             start_vm "$vm"
             ;;
         stop)
-            echo "Stopping $vm..."
             stop_vm "$vm"
             ;;
         reset)
-            echo "Resetting $vm..."
             reset_vm "$vm"
             ;;
         status)
-            echo "Status of $vm:"
             status_vm "$vm"
             ;;
         *)
